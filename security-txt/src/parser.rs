@@ -11,6 +11,7 @@ use core::{
 use memchr::memmem::find as find_bytes;
 use thiserror::Error;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Contact {
     Email(String),
     Discord(String),
@@ -33,6 +34,7 @@ impl Display for Contact {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct SecurityTxt {
     pub name: String,
     pub project_url: String,
@@ -247,4 +249,137 @@ pub fn find_and_parse(data: &[u8]) -> Result<SecurityTxt, SecurityTxtError> {
         None => return Err(SecurityTxtError::StartNotFound),
     };
     parse(&data[start..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    const VALID_SECURITY_TXT: &str = concat!(
+        "=======BEGIN SECURITY.TXT V1=======\0",
+        "name\0Example\0",
+        "project_url\0https://example.com\0",
+        "contacts\0email:security@example.com,discord:example\0",
+        "policy\0https://example.com/security\0",
+        "preferred_languages\0en,de\0",
+        "source_code\0https://github.com/Ov4433/solana-security-txt\0",
+        "source_release\0v1.1.3\0",
+        "source_revision\0abcdef123456\0",
+        "auditors\0Audit Co\0",
+        "acknowledgements\0Researcher\0",
+        "expiry\0",
+        "2026-12-31\0",
+        "=======END SECURITY.TXT V1=======\0"
+    );
+
+    #[test]
+    fn parses_valid_security_txt() {
+        let parsed = parse(VALID_SECURITY_TXT.as_bytes()).unwrap();
+
+        assert_eq!(parsed.name, "Example");
+        assert_eq!(parsed.project_url, "https://example.com");
+        assert_eq!(
+            parsed.contacts,
+            vec![
+                Contact::Email("security@example.com".into()),
+                Contact::Discord("example".into()),
+            ]
+        );
+        assert_eq!(parsed.policy, "https://example.com/security");
+        assert_eq!(parsed.preferred_languages, vec!["en", "de"]);
+        assert_eq!(
+            parsed.source_code.as_deref(),
+            Some("https://github.com/Ov4433/solana-security-txt")
+        );
+        assert_eq!(parsed.source_release.as_deref(), Some("v1.1.3"));
+        assert_eq!(parsed.source_revision.as_deref(), Some("abcdef123456"));
+        assert_eq!(parsed.auditors, vec!["Audit Co"]);
+        assert_eq!(parsed.acknowledgements.as_deref(), Some("Researcher"));
+        assert_eq!(parsed.expiry.as_deref(), Some("2026-12-31"));
+    }
+
+    #[test]
+    fn rejects_missing_required_field() {
+        let missing_policy = concat!(
+            "=======BEGIN SECURITY.TXT V1=======\0",
+            "name\0Example\0",
+            "project_url\0https://example.com\0",
+            "contacts\0email:security@example.com\0",
+            "=======END SECURITY.TXT V1=======\0"
+        );
+
+        assert!(matches!(
+            parse(missing_policy.as_bytes()),
+            Err(SecurityTxtError::MissingField(field)) if field == "policy"
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_field() {
+        let unknown_field = concat!(
+            "=======BEGIN SECURITY.TXT V1=======\0",
+            "name\0Example\0",
+            "project_url\0https://example.com\0",
+            "contacts\0email:security@example.com\0",
+            "policy\0https://example.com/security\0",
+            "treasury\0some-wallet\0",
+            "=======END SECURITY.TXT V1=======\0"
+        );
+
+        assert!(matches!(
+            parse(unknown_field.as_bytes()),
+            Err(SecurityTxtError::UnknownField(field)) if field == "treasury"
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_field() {
+        let duplicate_field = concat!(
+            "=======BEGIN SECURITY.TXT V1=======\0",
+            "name\0Example\0",
+            "project_url\0https://example.com\0",
+            "contacts\0email:security@example.com\0",
+            "policy\0https://example.com/security\0",
+            "name\0Another Example\0",
+            "=======END SECURITY.TXT V1=======\0"
+        );
+
+        assert!(matches!(
+            parse(duplicate_field.as_bytes()),
+            Err(SecurityTxtError::DuplicateField(field)) if field == "name"
+        ));
+    }
+
+    #[test]
+    fn parses_contact_types() {
+        assert_eq!(
+            Contact::try_from("email:security@example.com").unwrap(),
+            Contact::Email("security@example.com".into())
+        );
+        assert_eq!(
+            Contact::try_from("discord:example").unwrap(),
+            Contact::Discord("example".into())
+        );
+        assert_eq!(
+            Contact::try_from("telegram:example").unwrap(),
+            Contact::Telegram("example".into())
+        );
+        assert_eq!(
+            Contact::try_from("twitter:@example").unwrap(),
+            Contact::Twitter("@example".into())
+        );
+        assert_eq!(
+            Contact::try_from("link:https://example.com/security").unwrap(),
+            Contact::Link("https://example.com/security".into())
+        );
+        assert_eq!(
+            Contact::try_from("other:matrix").unwrap(),
+            Contact::Other("matrix".into())
+        );
+        assert!(matches!(
+            Contact::try_from("signal:example"),
+            Err(SecurityTxtError::InvalidContact(contact)) if contact == "signal:example"
+        ));
+    }
 }
