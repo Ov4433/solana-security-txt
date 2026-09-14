@@ -254,6 +254,7 @@ pub fn find_and_parse(data: &[u8]) -> Result<SecurityTxt, SecurityTxtError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     const VALID_SECURITY_TXT: &str = concat!(
         "=======BEGIN SECURITY.TXT V1=======\0",
@@ -267,7 +268,8 @@ mod tests {
         "source_revision\0abcdef123456\0",
         "auditors\0Audit Co\0",
         "acknowledgements\0Researcher\0",
-        "expiry\02026-12-31\0",
+        "expiry\0",
+        "2026-12-31\0",
         "=======END SECURITY.TXT V1=======\0"
     );
 
