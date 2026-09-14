@@ -29,7 +29,7 @@ solana-security-txt = "1.1.3"
 ```
 
 To install the querying tool, execute
-```
+```sh
 cargo install query-security-txt
 ```
 
@@ -67,7 +67,7 @@ You can use the `env!` macro to automatically configure values passed to the `se
 
 ### Example
 
-```rust
+```rust,ignore
 #[cfg(not(feature = "no-entrypoint"))]
 use {default_env::default_env, solana_security_txt::security_txt};
 
